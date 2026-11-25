@@ -1,0 +1,1242 @@
+NEURAL PROCESSING & SYSTEMS (TEC-323)
+TERM ASSIGNMENT 2026
+PROJECT EXECUTION GUIDE
+Problem: Investigating the Loss Landscape of Deep Neural Networks
+
+======================================================================
+1. PROJECT OBJECTIVE
+======================================================================
+
+The objective is to investigate how neural-network architecture,
+optimization algorithms, and weight initialization affect training
+behaviour and the geometry of the loss landscape.
+
+The project will:
+
+1. Generate a reproducible nonlinear classification dataset.
+2. Build fully connected neural networks with configurable depth and
+   width.
+3. Train networks using SGD, SGD with Momentum, and Adam.
+4. compare training loss, test accuracy, and convergence behaviour.
+5. Visualize two-dimensional slices of the loss landscape around a
+   trained set of weights.
+6. Examine flat/sharp regions and discuss possible saddle points and
+   local minima.
+7. Investigate the effect of Xavier and He initialization.
+8. Record experimental results and prepare evidence for the report
+   and viva.
+
+Important scientific qualification:
+A two-dimensional loss-landscape plot is a slice through a very
+high-dimensional parameter space. It does not show the entire
+landscape and cannot, by itself, prove that a point is a local or
+global minimum or a saddle point. The report must describe what the
+visualization actually demonstrates.
+
+The project uses a Two Moons synthetic classification dataset as an
+initial controlled testbed. It is suitable for learning and visualizing
+nonlinear classification. It is not a substitute for experiments on
+large-scale real-world datasets.
+
+======================================================================
+2. SOFTWARE AND HARDWARE REQUIREMENTS
+======================================================================
+
+Required:
+- Windows 10/11
+- Visual Studio Code
+- Python 3.10 or 3.11 (recommended for a predictable package setup)
+- Git
+- Internet connection for initial package installation
+
+Python packages:
+- torch
+- numpy
+- matplotlib
+- pandas
+- scikit-learn
+
+No GPU is required. The initial experiments are small enough to run
+on a normal CPU.
+
+Install:
+- Python: https://www.python.org/downloads/
+- VS Code: https://code.visualstudio.com/
+- Git: https://git-scm.com/downloads
+- VS Code Python extension: Microsoft
+- VS Code Pylance extension: Microsoft
+
+During Python installation on Windows, enable "Add Python to PATH".
+
+======================================================================
+3. CREATE THE PROJECT DIRECTORY AND GIT REPOSITORY
+======================================================================
+
+A. Create a folder named:
+
+    loss-landscape-investigation
+
+Open that folder in VS Code:
+File -> Open Folder -> select loss-landscape-investigation
+
+B. Open the VS Code terminal:
+Terminal -> New Terminal
+
+Check Python and Git:
+
+    python --version
+    git --version
+
+C. Initialize Git in the project folder:
+
+    git init
+
+D. Create and activate a virtual environment:
+
+    python -m venv .venv
+
+PowerShell activation:
+
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, use Command Prompt terminal and run:
+
+    .venv\Scripts\activate.bat
+
+After activation, the terminal prompt should show (.venv).
+
+E. Upgrade pip and install dependencies:
+
+    python -m pip install --upgrade pip
+    python -m pip install torch numpy matplotlib pandas scikit-learn
+
+F. Verify installation:
+
+    python -c "import torch, numpy, matplotlib, pandas, sklearn; print('PyTorch:', torch.__version__); print('All packages imported successfully')"
+
+G. Select the virtual environment in VS Code:
+- Press Ctrl+Shift+P.
+- Search for "Python: Select Interpreter".
+- Select the interpreter inside this project's .venv folder.
+
+======================================================================
+4. REPOSITORY STRUCTURE
+======================================================================
+
+Create this structure in VS Code:
+
+    loss-landscape-investigation/
+    |
+    |-- .venv/                  (created by Python; do not commit)
+    |-- results/
+    |   |-- figures/
+    |   |-- tables/
+    |   |-- checkpoints/
+    |
+    |-- dataset.py
+    |-- model.py
+    |-- train.py
+    |-- landscape.py
+    |-- experiments.py
+    |-- requirements.txt
+    |-- .gitignore
+    |-- README.md
+
+Create the results subfolders manually. The scripts also create
+required output folders when they run.
+
+======================================================================
+5. CREATE requirements.txt
+======================================================================
+
+Put this in requirements.txt:
+
+    torch
+    numpy
+    matplotlib
+    pandas
+    scikit-learn
+
+Install from this file (after activating .venv):
+
+    python -m pip install -r requirements.txt
+
+For a final reproducible submission, record the actual installed
+versions with:
+
+    python -m pip freeze > requirements-lock.txt
+
+If you create requirements-lock.txt, include it in the repository.
+
+======================================================================
+6. CREATE .gitignore
+======================================================================
+
+Put this in .gitignore:
+
+    .venv/
+    __pycache__/
+    *.py[cod]
+    .pytest_cache/
+    .idea/
+    .vscode/
+    results/checkpoints/*.pt
+    results/checkpoints/*.pth
+
+Do not ignore figures or result tables if they are part of the
+evidence you intend to submit. Large generated files should be
+reviewed before committing.
+
+======================================================================
+7. FILE 1: dataset.py
+======================================================================
+
+Purpose:
+- Generate the Two Moons dataset.
+- Split it into training and testing subsets.
+- Standardize features using training data only.
+- Return PyTorch tensors.
+- Optionally display the dataset.
+
+Create dataset.py and paste:
+
+    import matplotlib.pyplot as plt
+    import torch
+    from sklearn.datasets import make_moons
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+
+
+    def get_data(random_state=42):
+        # Generate 2,000 two-dimensional samples in two classes.
+        X, y = make_moons(
+            n_samples=2000,
+            noise=0.20,
+            random_state=random_state
+        )
+
+        # Keep 20% for final testing. Stratification preserves
+        # approximately the same class proportions in both splits.
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.20,
+            random_state=random_state,
+            stratify=y
+        )
+
+        # Fit the scaler on training data only to avoid data leakage.
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Convert arrays into PyTorch tensors.
+        X_train = torch.tensor(X_train, dtype=torch.float32)
+        X_test = torch.tensor(X_test, dtype=torch.float32)
+        y_train = torch.tensor(y_train, dtype=torch.long)
+        y_test = torch.tensor(y_test, dtype=torch.long)
+
+        return X_train, X_test, y_train, y_test
+
+
+    def plot_dataset():
+        X, y = make_moons(
+            n_samples=2000,
+            noise=0.20,
+            random_state=42
+        )
+
+        plt.figure(figsize=(8, 6))
+        plt.scatter(
+            X[:, 0],
+            X[:, 1],
+            c=y,
+            cmap="coolwarm",
+            edgecolors="black",
+            linewidths=0.25,
+            s=18
+        )
+        plt.title("Two Moons Dataset")
+        plt.xlabel("Feature 1")
+        plt.ylabel("Feature 2")
+        plt.tight_layout()
+        plt.savefig("results/figures/two_moons_dataset.png", dpi=200)
+        plt.show()
+
+
+    if __name__ == "__main__":
+        import os
+        os.makedirs("results/figures", exist_ok=True)
+
+        X_train, X_test, y_train, y_test = get_data()
+
+        print("Training samples:", len(X_train))
+        print("Testing samples:", len(X_test))
+        print("Number of input features:", X_train.shape[1])
+        print("Number of classes:", len(torch.unique(y_train)))
+
+        plot_dataset()
+
+Run:
+
+    python dataset.py
+
+Expected console output:
+
+    Training samples: 1600
+    Testing samples: 400
+    Number of input features: 2
+    Number of classes: 2
+
+Expected artifact:
+    results/figures/two_moons_dataset.png
+
+======================================================================
+8. FILE 2: model.py
+======================================================================
+
+Purpose:
+- Build a fully connected feedforward neural network.
+- Allow depth and width to be changed for experiments.
+- Support Xavier and He (Kaiming) initialization.
+
+Create model.py and paste:
+
+    import torch.nn as nn
+
+
+    class NeuralNetwork(nn.Module):
+        def __init__(
+            self,
+            input_size=2,
+            hidden_size=16,
+            num_hidden_layers=2,
+            output_size=2,
+            initialization="he"
+        ):
+            super().__init__()
+
+            if num_hidden_layers < 1:
+                raise ValueError("num_hidden_layers must be at least 1")
+
+            layers = []
+            in_features = input_size
+
+            for _ in range(num_hidden_layers):
+                linear = nn.Linear(in_features, hidden_size)
+                layers.append(linear)
+                layers.append(nn.ReLU())
+                in_features = hidden_size
+
+            layers.append(nn.Linear(in_features, output_size))
+            self.network = nn.Sequential(*layers)
+
+            self.initialize_weights(initialization)
+
+        def initialize_weights(self, initialization):
+            for module in self.modules():
+                if isinstance(module, nn.Linear):
+                    if initialization == "xavier":
+                        nn.init.xavier_uniform_(module.weight)
+                    elif initialization == "he":
+                        nn.init.kaiming_uniform_(
+                            module.weight,
+                            nonlinearity="relu"
+                        )
+                    elif initialization == "default":
+                        # Keep PyTorch's default Linear initialization.
+                        pass
+                    else:
+                        raise ValueError(
+                            "initialization must be "
+                            "'xavier', 'he', or 'default'"
+                        )
+
+                    nn.init.zeros_(module.bias)
+
+        def forward(self, x):
+            return self.network(x)
+
+The output layer returns two raw scores (logits). Do not add softmax
+to the model when using nn.CrossEntropyLoss; that loss function
+expects logits and applies the appropriate normalization internally.
+
+======================================================================
+9. FILE 3: train.py
+======================================================================
+
+Purpose:
+- Train one configurable network.
+- Support SGD, SGD with Momentum, and Adam.
+- Record training loss.
+- Calculate test accuracy.
+- Save a checkpoint and a loss graph.
+
+Create train.py and paste:
+
+    import os
+    import random
+    import numpy as np
+    import pandas as pd
+    import torch
+    import torch.nn as nn
+    import matplotlib.pyplot as plt
+
+    from dataset import get_data
+    from model import NeuralNetwork
+
+
+    def set_seed(seed=42):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+
+    def build_optimizer(name, parameters, learning_rate):
+        if name == "sgd":
+            return torch.optim.SGD(
+                parameters,
+                lr=learning_rate
+            )
+
+        if name == "momentum":
+            return torch.optim.SGD(
+                parameters,
+                lr=learning_rate,
+                momentum=0.9
+            )
+
+        if name == "adam":
+            return torch.optim.Adam(
+                parameters,
+                lr=learning_rate
+            )
+
+        raise ValueError("Unknown optimizer: " + name)
+
+
+    def evaluate(model, X_test, y_test):
+        model.eval()
+        with torch.no_grad():
+            logits = model(X_test)
+            predictions = torch.argmax(logits, dim=1)
+            accuracy = (predictions == y_test).float().mean().item()
+
+        return accuracy
+
+
+    def train_model(
+        optimizer_name="adam",
+        hidden_size=16,
+        num_hidden_layers=2,
+        initialization="he",
+        epochs=200,
+        learning_rate=0.01,
+        seed=42,
+        run_name="baseline"
+    ):
+        set_seed(seed)
+        os.makedirs("results/figures", exist_ok=True)
+        os.makedirs("results/checkpoints", exist_ok=True)
+        os.makedirs("results/tables", exist_ok=True)
+
+        X_train, X_test, y_train, y_test = get_data()
+
+        model = NeuralNetwork(
+            input_size=2,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            output_size=2,
+            initialization=initialization
+        )
+
+        criterion = nn.CrossEntropyLoss()
+        optimizer = build_optimizer(
+            optimizer_name,
+            model.parameters(),
+            learning_rate
+        )
+
+        history = []
+
+        for epoch in range(epochs):
+            model.train()
+
+            logits = model(X_train)
+            loss = criterion(logits, y_train)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            history.append({
+                "epoch": epoch + 1,
+                "training_loss": loss.item()
+            })
+
+            if (epoch + 1) % 20 == 0:
+                print(
+                    f"{run_name} | Epoch {epoch + 1}/{epochs} "
+                    f"| Loss: {loss.item():.5f}"
+                )
+
+        test_accuracy = evaluate(model, X_test, y_test)
+        final_training_loss = history[-1]["training_loss"]
+
+        print("\nRun:", run_name)
+        print("Optimizer:", optimizer_name)
+        print("Final training loss:", round(final_training_loss, 5))
+        print("Test accuracy:", round(test_accuracy * 100, 2), "%")
+
+        # Save model weights and configuration.
+        checkpoint_path = (
+            f"results/checkpoints/{run_name}.pt"
+        )
+
+        torch.save({
+            "model_state_dict": model.state_dict(),
+            "hidden_size": hidden_size,
+            "num_hidden_layers": num_hidden_layers,
+            "initialization": initialization,
+            "optimizer": optimizer_name,
+            "learning_rate": learning_rate,
+            "seed": seed,
+            "test_accuracy": test_accuracy,
+            "final_training_loss": final_training_loss
+        }, checkpoint_path)
+
+        # Save epoch-by-epoch training history.
+        history_path = f"results/tables/{run_name}_history.csv"
+        pd.DataFrame(history).to_csv(history_path, index=False)
+
+        # Save loss graph.
+        plt.figure(figsize=(8, 5))
+        plt.plot(
+            [row["epoch"] for row in history],
+            [row["training_loss"] for row in history]
+        )
+        plt.xlabel("Epoch")
+        plt.ylabel("Training Cross-Entropy Loss")
+        plt.title(f"Training Loss - {run_name}")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(
+            f"results/figures/{run_name}_loss.png",
+            dpi=200
+        )
+        plt.close()
+
+        return {
+            "run_name": run_name,
+            "optimizer": optimizer_name,
+            "hidden_size": hidden_size,
+            "num_hidden_layers": num_hidden_layers,
+            "initialization": initialization,
+            "final_training_loss": final_training_loss,
+            "test_accuracy": test_accuracy,
+            "checkpoint": checkpoint_path
+        }
+
+
+    if __name__ == "__main__":
+        result = train_model(
+            optimizer_name="adam",
+            hidden_size=16,
+            num_hidden_layers=2,
+            initialization="he",
+            epochs=200,
+            learning_rate=0.01,
+            seed=42,
+            run_name="baseline_adam"
+        )
+
+Run:
+
+    python train.py
+
+Expected artifacts:
+- results/checkpoints/baseline_adam.pt
+- results/tables/baseline_adam_history.csv
+- results/figures/baseline_adam_loss.png
+
+The exact loss and accuracy depend on the environment and execution.
+Do not invent or copy illustrative values into the report; record
+your actual results.
+
+======================================================================
+10. FILE 4: landscape.py
+======================================================================
+
+Purpose:
+- Load a trained checkpoint.
+- Construct two directions in parameter space.
+- Evaluate loss on a grid around the trained parameters.
+- Plot a 3D surface and a 2D contour map.
+
+Concept:
+Let theta* be the trained parameter vector. Let d1 and d2 be two
+directions in parameter space. We evaluate:
+
+    L(alpha, beta) = Loss(theta* + alpha*d1 + beta*d2)
+
+The resulting grid is a two-dimensional slice through the full
+parameter space.
+
+Create landscape.py and paste:
+
+    import os
+    import numpy as np
+    import torch
+    import torch.nn as nn
+    import matplotlib.pyplot as plt
+
+    from dataset import get_data
+    from model import NeuralNetwork
+
+
+    def make_filter_normalized_direction(model):
+        direction = []
+
+        for parameter in model.parameters():
+            if parameter.ndim >= 2:
+                random_direction = torch.randn_like(parameter)
+
+                # Normalize each weight tensor's direction to the
+                # scale of its corresponding parameter tensor.
+                direction_norm = torch.norm(random_direction)
+                parameter_norm = torch.norm(parameter)
+
+                if direction_norm > 0:
+                    random_direction = (
+                        random_direction / direction_norm
+                    ) * parameter_norm
+
+                direction.append(random_direction)
+            else:
+                # Keep bias directions zero in this visualization.
+                direction.append(torch.zeros_like(parameter))
+
+        return direction
+
+
+    def add_directions(base_parameters, direction1, direction2,
+                       alpha, beta):
+        with torch.no_grad():
+            for parameter, base, d1, d2 in zip(
+                model.parameters(),
+                base_parameters,
+                direction1,
+                direction2
+            ):
+                parameter.copy_(base + alpha * d1 + beta * d2)
+
+
+    def main():
+        global model
+
+        os.makedirs("results/figures", exist_ok=True)
+
+        checkpoint_path = "results/checkpoints/baseline_adam.pt"
+
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(
+                "Checkpoint not found. Run python train.py first."
+            )
+
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False
+        )
+
+        model = NeuralNetwork(
+            input_size=2,
+            hidden_size=checkpoint["hidden_size"],
+            num_hidden_layers=checkpoint["num_hidden_layers"],
+            output_size=2,
+            initialization=checkpoint["initialization"]
+        )
+
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model.eval()
+
+        X_train, X_test, y_train, y_test = get_data()
+        criterion = nn.CrossEntropyLoss()
+
+        base_parameters = [
+            parameter.detach().clone()
+            for parameter in model.parameters()
+        ]
+
+        torch.manual_seed(123)
+        direction1 = make_filter_normalized_direction(model)
+        direction2 = make_filter_normalized_direction(model)
+
+        # Use a 21 by 21 grid. Increase resolution only after the
+        # basic experiment works.
+        coordinates = np.linspace(-1.0, 1.0, 21)
+        loss_grid = np.zeros((len(coordinates), len(coordinates)))
+
+        for i, alpha in enumerate(coordinates):
+            for j, beta in enumerate(coordinates):
+                add_directions(
+                    base_parameters,
+                    direction1,
+                    direction2,
+                    alpha,
+                    beta
+                )
+
+                with torch.no_grad():
+                    loss = criterion(model(X_train), y_train)
+
+                loss_grid[j, i] = loss.item()
+
+        # Restore the exact trained parameters.
+        with torch.no_grad():
+            for parameter, base in zip(
+                model.parameters(),
+                base_parameters
+            ):
+                parameter.copy_(base)
+
+        A, B = np.meshgrid(coordinates, coordinates)
+
+        # 3D surface plot.
+        figure = plt.figure(figsize=(10, 7))
+        axis = figure.add_subplot(111, projection="3d")
+        axis.plot_surface(
+            A,
+            B,
+            loss_grid,
+            cmap="viridis",
+            edgecolor="none"
+        )
+        axis.set_xlabel("Direction 1 coefficient")
+        axis.set_ylabel("Direction 2 coefficient")
+        axis.set_zlabel("Training loss")
+        axis.set_title("2D Slice of the Neural Network Loss Landscape")
+        plt.tight_layout()
+        plt.savefig(
+            "results/figures/loss_landscape_3d.png",
+            dpi=200
+        )
+        plt.close()
+
+        # 2D contour plot.
+        plt.figure(figsize=(8, 6))
+        contour = plt.contourf(
+            A,
+            B,
+            loss_grid,
+            levels=30,
+            cmap="viridis"
+        )
+        plt.colorbar(contour, label="Training loss")
+        plt.scatter([0], [0], color="red", marker="x",
+                    s=100, label="Trained parameters")
+        plt.xlabel("Direction 1 coefficient")
+        plt.ylabel("Direction 2 coefficient")
+        plt.title("Loss Landscape Contour")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(
+            "results/figures/loss_landscape_contour.png",
+            dpi=200
+        )
+        plt.show()
+
+
+    if __name__ == "__main__":
+        main()
+
+Run only after train.py has successfully created the checkpoint:
+
+    python landscape.py
+
+Expected artifacts:
+- results/figures/loss_landscape_3d.png
+- results/figures/loss_landscape_contour.png
+
+Interpretation:
+- A valley-like region indicates lower loss in the displayed slice.
+- A steep region indicates loss changes rapidly along the selected
+  directions.
+- A relatively flat region indicates loss changes slowly along the
+  selected directions.
+- The red cross is the trained parameter point (alpha=0, beta=0).
+
+Caution:
+The two random directions are only a visualization basis. A valley,
+flat region, or saddle-like shape in this slice is not definitive proof
+of the corresponding property in the complete parameter space.
+To make stronger claims about minima or saddle points, use additional
+directions, local curvature/Hessian analysis, and repeated runs.
+
+======================================================================
+11. FILE 5: experiments.py
+======================================================================
+
+Purpose:
+Run a small controlled set of experiments and save a comparison
+table. Each run uses the same dataset split, epoch count, and seed.
+The model architecture, optimizer, and initialization are varied.
+
+Create experiments.py and paste:
+
+    import os
+    import pandas as pd
+    from train import train_model
+
+
+    def main():
+        os.makedirs("results/tables", exist_ok=True)
+
+        configurations = [
+            # Optimizer comparison: same architecture and initialization.
+            {
+                "optimizer_name": "sgd",
+                "hidden_size": 32,
+                "num_hidden_layers": 3,
+                "initialization": "he",
+                "run_name": "optimizer_sgd"
+            },
+            {
+                "optimizer_name": "momentum",
+                "hidden_size": 32,
+                "num_hidden_layers": 3,
+                "initialization": "he",
+                "run_name": "optimizer_momentum"
+            },
+            {
+                "optimizer_name": "adam",
+                "hidden_size": 32,
+                "num_hidden_layers": 3,
+                "initialization": "he",
+                "run_name": "optimizer_adam"
+            },
+
+            # Depth comparison: same width, optimizer, initialization.
+            {
+                "optimizer_name": "adam",
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+                "initialization": "he",
+                "run_name": "depth_2"
+            },
+            {
+                "optimizer_name": "adam",
+                "hidden_size": 32,
+                "num_hidden_layers": 5,
+                "initialization": "he",
+                "run_name": "depth_5"
+            },
+
+            # Initialization comparison: same architecture and optimizer.
+            {
+                "optimizer_name": "adam",
+                "hidden_size": 32,
+                "num_hidden_layers": 3,
+                "initialization": "xavier",
+                "run_name": "init_xavier"
+            },
+            {
+                "optimizer_name": "adam",
+                "hidden_size": 32,
+                "num_hidden_layers": 3,
+                "initialization": "he",
+                "run_name": "init_he"
+            }
+        ]
+
+        results = []
+
+        for config in configurations:
+            print("\n" + "=" * 60)
+            print("Starting:", config["run_name"])
+            print("=" * 60)
+
+            result = train_model(
+                optimizer_name=config["optimizer_name"],
+                hidden_size=config["hidden_size"],
+                num_hidden_layers=config["num_hidden_layers"],
+                initialization=config["initialization"],
+                epochs=200,
+                learning_rate=0.01,
+                seed=42,
+                run_name=config["run_name"]
+            )
+
+            results.append(result)
+
+        results_frame = pd.DataFrame(results)
+        results_frame.to_csv(
+            "results/tables/experiment_comparison.csv",
+            index=False
+        )
+
+        print("\nExperiment comparison:")
+        print(results_frame.to_string(index=False))
+        print("\nSaved results/tables/experiment_comparison.csv")
+
+
+    if __name__ == "__main__":
+        main()
+
+Run:
+
+    python experiments.py
+
+This runs seven configurations and may take several minutes on CPU.
+
+Important experimental-design note:
+- The three optimizer runs form a controlled optimizer comparison.
+- The two depth runs compare depth at a fixed width.
+- The Xavier and He runs compare initialization at a fixed architecture.
+- The baseline run from train.py is an initial smoke test, not
+  automatically part of every controlled comparison.
+- This first experiment set does not yet compare every depth-width
+  combination or multiple random seeds.
+- For stronger evidence, repeat each configuration with several
+  seeds and report mean and standard deviation.
+
+======================================================================
+12. EXACT ORDER OF EXECUTION
+======================================================================
+
+Complete the work in this order:
+
+1. Create the repository folder and open it in VS Code.
+2. Run git init.
+3. Create and activate .venv.
+4. Install packages using requirements.txt.
+5. Create .gitignore and the results subfolders.
+6. Create dataset.py.
+7. Run:
+
+       python dataset.py
+
+   Confirm the sample counts and dataset plot.
+
+8. Create model.py.
+9. Create train.py.
+10. Run:
+
+       python train.py
+
+    Confirm that training loss is printed, test accuracy is reported,
+    and checkpoint/CSV/graph files are saved.
+
+11. Create landscape.py.
+12. Run:
+
+       python landscape.py
+
+    Inspect the 3D surface and contour plot.
+
+13. Create experiments.py.
+14. Run:
+
+       python experiments.py
+
+    Inspect the experiment comparison CSV and individual loss curves.
+
+15. Review all generated results, check that the comparisons are
+    scientifically fair, and write the technical report.
+
+Do not proceed to the next step if the current step has an error.
+Resolve errors before adding more code.
+
+======================================================================
+13. GIT WORKFLOW: SAVE THE PROJECT TO GITHUB
+======================================================================
+
+A. Create a new empty repository on GitHub:
+    https://github.com/new
+
+Suggested repository name:
+    loss-landscape-investigation
+
+Choose Public or Private according to your course requirements.
+Do not initialize it with a README if you already created files
+locally and want to push this existing repository.
+
+B. In the VS Code terminal, check:
+
+    git status
+
+C. Add and commit the initial project:
+
+    git add .
+    git commit -m "Initial project structure and dataset"
+
+D. Add the GitHub remote. Replace USERNAME with your GitHub username:
+
+    git remote add origin https://github.com/USERNAME/loss-landscape-investigation.git
+
+E. Set the main branch and push:
+
+    git branch -M main
+    git push -u origin main
+
+If Git asks for authentication, follow GitHub's browser sign-in or
+credential-manager process. Do not put passwords or tokens in source
+files.
+
+After meaningful milestones, commit changes:
+
+    git add .
+    git commit -m "Add neural network training pipeline"
+    git push
+
+Suggested commit milestones:
+- Initial project structure and dataset
+- Add configurable neural network
+- Add training and evaluation
+- Add loss landscape visualization
+- Add controlled experiments
+- Add report and final results
+
+======================================================================
+14. EXPERIMENTAL REQUIREMENTS AND FAIR COMPARISON
+======================================================================
+
+For credible comparisons:
+
+1. Use the same train/test split for all models.
+2. Keep preprocessing identical.
+3. Change one principal factor at a time when comparing optimizers,
+   depth, width, or initialization.
+4. Record random seeds.
+5. Record the optimizer and its hyperparameters.
+6. Record training loss and test accuracy.
+7. Record training time if comparing computational cost.
+8. Repeat important experiments with multiple seeds.
+9. Do not select results solely because they look favourable.
+10. Keep test data out of training and model-selection decisions.
+
+Suggested experimental factors:
+
+A. Optimizer:
+- SGD
+- SGD with Momentum (momentum=0.9)
+- Adam
+
+B. Depth:
+- 2 hidden layers
+- 3 hidden layers
+- 5 hidden layers
+
+C. Width:
+- 16 neurons per hidden layer
+- 32 neurons per hidden layer
+- 64 neurons per hidden layer
+
+D. Initialization:
+- PyTorch default initialization
+- Xavier uniform
+- He/Kaiming uniform
+
+E. Loss landscape:
+- Plot a 2D slice around the trained weights.
+- Compare landscapes from different trained models.
+- Use identical visualization ranges and methods when comparing.
+- Consider more than one pair of directions.
+
+The initial scripts implement a practical subset. Extend the matrix
+gradually; do not launch every possible combination before validating
+the pipeline.
+
+======================================================================
+15. WHAT TO SAVE AS PROJECT EVIDENCE
+======================================================================
+
+Keep these outputs:
+
+Dataset:
+- two_moons_dataset.png
+
+Training:
+- baseline_adam.pt
+- baseline_adam_history.csv
+- baseline_adam_loss.png
+
+Loss landscape:
+- loss_landscape_3d.png
+- loss_landscape_contour.png
+
+Experiments:
+- optimizer_sgd_loss.png
+- optimizer_momentum_loss.png
+- optimizer_adam_loss.png
+- depth_2_loss.png
+- depth_5_loss.png
+- init_xavier_loss.png
+- init_he_loss.png
+- experiment_comparison.csv
+
+Also preserve:
+- Source code
+- requirements.txt (and preferably requirements-lock.txt)
+- GitHub repository link
+- Notes on machine/software environment
+- Actual experiment observations
+
+Do not submit only screenshots. Submit the executable source code,
+dataset-generation procedure, dependencies, and instructions.
+
+======================================================================
+16. TECHNICAL REPORT OUTLINE
+======================================================================
+
+Use this structure for the final report:
+
+1. Title page
+2. Abstract
+3. Introduction
+4. Problem statement and objectives
+5. Theoretical background
+   - Feedforward neural networks
+   - Loss functions
+   - Gradient descent
+   - SGD, Momentum, Adam
+   - Weight initialization
+   - Loss landscapes
+   - Local minima, saddle points, flat and sharp regions
+6. Dataset and preprocessing
+7. Methodology and experimental setup
+8. Network architectures
+9. Optimizer comparison
+10. Initialization comparison
+11. Loss landscape visualization
+12. Results and discussion
+13. Limitations
+14. Conclusion and future work
+15. References
+16. Appendix: source code and execution instructions
+
+For every graph:
+- Give it a figure number and descriptive caption.
+- Label axes and units where applicable.
+- Explain what the graph shows.
+- Avoid claiming more than the experiment supports.
+
+======================================================================
+17. VIVA PREPARATION: QUESTIONS YOU MUST BE ABLE TO ANSWER
+======================================================================
+
+1. What is a neural network?
+2. What is a weight? What is a bias?
+3. What is a loss function?
+4. Why is Cross-Entropy Loss used for classification?
+5. What is gradient descent?
+6. What is the learning rate?
+7. What is an epoch?
+8. What is forward propagation?
+9. What is backpropagation?
+10. Why do we clear gradients using optimizer.zero_grad()?
+11. What is the difference between SGD and Adam?
+12. What does momentum do?
+13. What is weight initialization?
+14. What are Xavier and He initialization?
+15. What is a loss landscape?
+16. What is a local minimum?
+17. What is a global minimum?
+18. What is a saddle point?
+19. What is the difference between a flat and sharp region?
+20. What does a 2D loss-landscape slice represent?
+21. Why can two models with similar test accuracy have different
+    training losses or loss landscapes?
+22. What is overfitting?
+23. Why do we keep a separate test dataset?
+24. What is reproducibility?
+25. What are the limitations of this experiment?
+
+======================================================================
+18. TROUBLESHOOTING
+======================================================================
+
+Problem: "python is not recognized"
+- Reinstall Python and enable Add Python to PATH.
+- Restart VS Code.
+- Try the Windows launcher:
+
+      py --version
+
+Problem: PowerShell refuses to activate .venv
+- Switch VS Code terminal to Command Prompt.
+- Run:
+
+      .venv\Scripts\activate.bat
+
+Problem: ModuleNotFoundError
+- Confirm the .venv interpreter is selected.
+- Activate .venv.
+- Run:
+
+      python -m pip install -r requirements.txt
+
+Problem: PyTorch import fails
+- Check the selected interpreter.
+- Reinstall using:
+
+      python -m pip install torch
+
+Problem: landscape.py says checkpoint not found
+- Run:
+
+      python train.py
+
+  first, and check that results/checkpoints/baseline_adam.pt exists.
+
+Problem: A plot window does not appear
+- Check whether the PNG file was saved under results/figures.
+- If running remotely or without a graphical display, inspect the
+  saved PNG rather than relying on plt.show().
+
+Problem: Git push is rejected
+- Confirm the remote URL:
+
+      git remote -v
+
+- Confirm that the GitHub repository exists and that you have access.
+- If the remote repository already contains commits, inspect and
+  reconcile the histories rather than force-pushing blindly.
+
+======================================================================
+19. FINAL DEFINITION OF DONE
+======================================================================
+
+The project is ready for submission only when all applicable items
+below are complete:
+
+[ ] Python virtual environment works.
+[ ] Dependencies are documented.
+[ ] Dataset can be regenerated from source.
+[ ] Train/test split and preprocessing are reproducible.
+[ ] Configurable neural network is implemented.
+[ ] Baseline model trains successfully.
+[ ] Test accuracy is calculated on unseen test data.
+[ ] Training history and graphs are saved.
+[ ] SGD, Momentum, and Adam are compared.
+[ ] Depth and width experiments are conducted.
+[ ] Initialization methods are compared.
+[ ] 3D loss surface is generated.
+[ ] 2D contour plot is generated.
+[ ] Loss-landscape interpretation is technically justified.
+[ ] Experimental results are recorded in CSV.
+[ ] Important experiments are repeated with multiple seeds.
+[ ] Limitations are documented.
+[ ] GitHub repository contains source code and instructions.
+[ ] Technical report is complete.
+[ ] You can explain and demonstrate the implementation in a viva.
+
+The final academic objective is not merely to produce attractive
+graphs or obtain high accuracy. It is to demonstrate, through
+controlled computational experiments, how architecture,
+optimization, and initialization influence neural-network training
+and the observed loss landscape.
+
+======================================================================
+END OF PROJECT EXECUTION GUIDE
+======================================================================
